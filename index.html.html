@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive PYQ Quiz App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Kalam:wght@300;400;700&display=swap" rel="stylesheet">
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Kalam', cursive;
+            background-color: #fdf6e3;
+            background-image: repeating-linear-gradient(transparent, transparent 31px, #94a3b8 31px, #94a3b8 32px);
+            background-attachment: local;
+            color: #000f55;
+        }
+        .notebook-content {
+            background: rgba(253, 246, 227, 0.85);
+        }
+        .correct { background-color: #dcfce7 !important; border-color: #22c55e !important; }
+        .incorrect { background-color: #fee2e2 !important; border-color: #ef4444 !important; }
+        .selected { background-color: #bfdbfe; border-color: #3b82f6; }
+        .palette-answered { background-color: #22c55e; color: white; border-color: #22c55e; }
+        .palette-unanswered { background-color: #ef4444; color: white; border-color: #ef4444; }
+        .palette-current { border: 3px solid #000f55; transform: scale(1.1); }
+        
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+    </style>
+</head>
+<body class="h-[100dvh] w-full overflow-hidden flex flex-col">
+    <!-- Header -->
+    <header class="bg-white/95 shadow-md p-3 md:p-4 flex flex-col sm:flex-row gap-3 justify-between items-center z-20 shrink-0">
+        <h1 class="text-xl md:text-2xl font-bold text-center">PYQ Quiz App</h1>
+        <div class="flex flex-wrap gap-2 md:gap-4 items-center justify-center">
+            <select id="subject-filter" class="p-1.5 md:p-2 border rounded border-blue-900 bg-transparent font-bold text-sm md:text-base w-32 md:w-auto" onchange="filterQuestions()">
+                <option value="all">All Subjects</option>
+            </select>
+            <select id="mode-selector" class="p-1.5 md:p-2 border rounded border-blue-900 bg-transparent font-bold text-sm md:text-base w-32 md:w-auto" onchange="changeMode()">
+                <option value="practice">Practice</option>
+                <option value="exam">Exam</option>
+            </select>
+            <div id="timer" class="hidden text-lg md:text-xl font-bold text-red-600 bg-red-50 px-2 rounded border border-red-200">00:00</div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col md:flex-row overflow-hidden">
+        
+        <!-- Question Area -->
+        <main class="flex-1 overflow-y-auto p-4 md:p-8 notebook-content" id="question-container">
+            <div class="max-w-4xl mx-auto pb-10">
+                <div id="exam-info" class="text-xs md:text-sm text-gray-600 mb-3 font-bold border-b border-gray-300 pb-1"></div>
+                
+                <div class="mb-5">
+                    <h2 class="text-lg md:text-xl font-bold mb-2 text-blue-900">Q<span id="q-num">1</span>:</h2>
+                    <p id="q-en" class="text-base md:text-lg mb-2 font-bold"></p>
+                    <p id="q-hi" class="text-base md:text-lg text-gray-700"></p>
+                </div>
+
+                <div id="options-container" class="space-y-3 mb-6">
+                </div>
+
+                <div id="feedback-container" class="hidden p-4 rounded bg-blue-50 border border-blue-200 mb-6 shadow-sm">
+                    <h3 class="font-bold text-base md:text-lg mb-2 text-green-700">Explanation / व्याख्या:</h3>
+                    <p id="explanation-text" class="mb-3 font-bold text-sm md:text-base"></p>
+                    <ul id="options-feedback" class="list-disc pl-5 space-y-1 text-sm md:text-base text-gray-800"></ul>
+                </div>
+
+                <div class="flex justify-between mt-6 gap-2">
+                    <button onclick="prevQuestion()" class="flex-1 max-w-[150px] py-2 md:py-2.5 bg-blue-900 text-white font-bold rounded shadow hover:bg-blue-800 transition-colors text-sm md:text-base">← Previous</button>
+                    <button onclick="nextQuestion()" class="flex-1 max-w-[150px] py-2 md:py-2.5 bg-blue-900 text-white font-bold rounded shadow hover:bg-blue-800 transition-colors text-sm md:text-base">Next →</button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Sidebar / Palette -->
+        <aside class="w-full md:w-72 bg-white/95 border-t md:border-t-0 md:border-l border-blue-300 p-3 md:p-4 flex flex-col shrink-0 overflow-y-auto z-10 max-h-[35vh] md:max-h-full shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] md:shadow-none">
+            <h3 class="font-bold text-sm md:text-lg mb-2 md:mb-4 text-center border-b pb-1 md:pb-2 text-blue-900">Question Palette</h3>
+            
+            <div class="flex flex-wrap gap-1.5 md:gap-2 justify-center md:grid md:grid-cols-5 lg:grid-cols-4 md:justify-start flex-1 md:flex-none overflow-y-auto content-start" id="palette-grid">
+            </div>
+            
+            <div class="mt-3 md:mt-6 text-xs md:text-sm grid grid-cols-2 gap-1 border-t pt-2 border-gray-200">
+                <div class="flex items-center gap-1"><span class="w-3 h-3 bg-[#22c55e] inline-block rounded-sm"></span> Answered</div>
+                <div class="flex items-center gap-1"><span class="w-3 h-3 border border-gray-400 inline-block rounded-sm"></span> Unanswered</div>
+            </div>
+            
+            <!-- Always accessible Submit Button -->
+            <div class="mt-3 md:mt-auto pt-3 border-t border-gray-200">
+                <button onclick="submitExam()" class="w-full py-2 md:py-3 bg-red-600 text-white font-bold rounded-lg shadow hover:bg-red-700 transition-colors text-sm md:text-base">Submit & View Score</button>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Summary Modal -->
+    <div id="summary-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white p-6 md:p-8 rounded-xl max-w-md w-full text-center shadow-2xl">
+            <h2 class="text-2xl md:text-3xl font-bold mb-4 text-blue-900">Exam Summary</h2>
+            <div class="bg-blue-50 rounded-lg p-4 mb-6 border border-blue-100 flex flex-col gap-2">
+                <p class="text-lg md:text-xl border-b border-blue-200 pb-2">Score: <span id="final-score" class="font-bold text-green-600 text-2xl">0</span> / <span id="total-q" class="text-2xl">0</span></p>
+                <p class="text-gray-700 text-sm md:text-base">Accuracy: <span id="accuracy" class="font-bold text-lg text-blue-800">0</span>%</p>
+                <p class="text-gray-700 text-sm md:text-base">Time Taken: <span id="time-taken" class="font-bold text-lg text-red-600">00:00</span></p>
+            </div>
+            <button onclick="closeSummary()" class="w-full py-3 bg-blue-900 text-white font-bold rounded-lg hover:bg-blue-800 transition-colors shadow">Review Answers</button>
+        </div>
+    </div>
+
+    <script>
+        const QUESTION_DATABASE = [
+            {
+                "id": 1,
+                "subject": "Cloze Test",
+                "exam_info": "SSC STENOGRAPHER 10/12/2024 (Morning)",
+                "question": {
+                    "en": "For most of us who are born and live in India, social inequality and (1) ________ are facts of life.",
+                    "hi": "हम में से अधिकांश लोग, जो भारत में जन्मे हैं और यहाँ रहते हैं, उनके लिए सामाजिक असमानता और (1) ________ जीवन की वास्तविकताएँ हैं।"
+                },
+                "options": [
+                    { "en": "exclusion", "hi": "exclusion" },
+                    { "en": "gatherings", "hi": "gatherings" },
+                    { "en": "mobility", "hi": "mobility" },
+                    { "en": "harmony", "hi": "harmony" }
+                ],
+                "answer": 0,
+                "explanation": "“Social inequality and exclusion” – समाज में असमानता और बहिष्करण जीवन की वास्तविकताएँ हैं।",
+                "feedback": [
+                    "A- Correct.",
+                    "B- Incorrect.",
+                    "C- Incorrect.",
+                    "D- Incorrect."
+                ]
+            },
+            {
+                "id": 2,
+                "subject": "Cloze Test",
+                "exam_info": "SSC STENOGRAPHER 10/12/2024 (Morning)",
+                "question": {
+                    "en": "We see (2) ________ on the streets and on railway platforms.",
+                    "hi": "हम सड़कों और रेलवे प्लेटफार्मों पर (2) ________ देखते हैं।"
+                },
+                "options": [
+                    { "en": "vehicles", "hi": "vehicles" },
+                    { "en": "airports", "hi": "airports" },
+                    { "en": "beggars", "hi": "beggars" },
+                    { "en": "parliaments", "hi": "parliaments" }
+                ],
+                "answer": 2,
+                "explanation": "Context is about people seen on streets and railway platforms. So, “beggars” (भिखारी) fits.",
+                "feedback": [
+                    "A- Incorrect.",
+                    "B- Incorrect.",
+                    "C- Correct.",
+                    "D- Incorrect."
+                ]
+            },
+            {
+                "id": 3,
+                "subject": "Cloze Test",
+                "exam_info": "SSC STENOGRAPHER 10/12/2024 (Morning)",
+                "question": {
+                    "en": "We see young children (3) ________ as domestic workers, construction helpers, cleaners and helpers in streetside restaurants (dhabas) and tea-shops.",
+                    "hi": "हम छोटे बच्चों को घरेलू कामगारों, निर्माण सहायक, सफाईकर्मी और सड़क किनारे के रेस्तरां (ढाबों) तथा चाय की दुकानों में सहायक के रूप में (3) ________ करते हुए देखते हैं।"
+                },
+                "options": [
+                    { "en": "excelling", "hi": "excelling" },
+                    { "en": "revolting", "hi": "revolting" },
+                    { "en": "labouring", "hi": "labouring" },
+                    { "en": "cheating", "hi": "cheating" }
+                ],
+                "answer": 2,
+                "explanation": "Children are working as domestic workers etc. “labouring” (मजदूरी करते हुए) is the correct word.",
+                "feedback": [
+                    "A- Incorrect.",
+                    "B- Incorrect.",
+                    "C- Correct.",
+                    "D- Incorrect."
+                ]
+            },
+            {
+                "id": 4,
+                "subject": "Cloze Test",
+                "exam_info": "SSC STENOGRAPHER 10/12/2024 (Morning)",
+                "question": {
+                    "en": "We are not (4) ________ at the sight of small children, who work as domestic workers in middle class urban homes, carrying the school bags of older children to school.",
+                    "hi": "हमें उन छोटे बच्चों को देखकर (4) ________ नहीं होती, जो मध्यवर्गीय शहरी घरों में घरेलू कामगारों के रूप में काम करते हैं और बड़े बच्चों के स्कूल बैग स्कूल तक लेकर जाते हैं।"
+                },
+                "options": [
+                    { "en": "envious", "hi": "envious" },
+                    { "en": "composed", "hi": "composed" },
+                    { "en": "surprised", "hi": "surprised" },
+                    { "en": "afraid", "hi": "afraid" }
+                ],
+                "answer": 2,
+                "explanation": "We are not “surprised” (हैरान) at the sight of small children working.",
+                "feedback": [
+                    "A- Incorrect.",
+                    "B- Incorrect.",
+                    "C- Correct.",
+                    "D- Incorrect."
+                ]
+            },
+            {
+                "id": 5,
+                "subject": "Cloze Test",
+                "exam_info": "SSC STENOGRAPHER 10/12/2024 (Morning)",
+                "question": {
+                    "en": "It does not immediately (5) ________ us as unjust that some children are denied schooling.",
+                    "hi": "यह बात हमें तुरंत (5) ________ नहीं करती कि कुछ बच्चों को शिक्षा से वंचित रखा जा रहा है।"
+                },
+                "options": [
+                    { "en": "strike", "hi": "strike" },
+                    { "en": "force", "hi": "force" },
+                    { "en": "touch", "hi": "touch" },
+                    { "en": "slap", "hi": "slap" }
+                ],
+                "answer": 2,
+                "explanation": "“It does not immediately touch us” – यह बात हमें तुरंत भावुक/प्रभावित नहीं करती।",
+                "feedback": [
+                    "A- Incorrect.",
+                    "B- Incorrect.",
+                    "C- Correct.",
+                    "D- Incorrect."
+                ]
+            },
+            {
+                "id": 6,
+                "subject": "Cloze Test",
+                "exam_info": "SSC STENOGRAPHER 10/12/2024 (Afternoon)",
+                "question": {
+                    "en": "The Kodagu district administration ________ (6) planned a Honey Festival in the gardens of Raja Seat in Madikeri on 24 and 25 December.",
+                    "hi": "कोडगु ज़िला प्रशासन ने मडिकेरी में राजा सीट के बगीचों में 24 और 25 दिसंबर को एक हनी फेस्टिवल आयोजित करने की ________ (6) बनाई है।"
+                },
+                "options": [
+                    { "en": "have", "hi": "have" },
+                    { "en": "has", "hi": "has" },
+                    { "en": "had", "hi": "had" },
+                    { "en": "has been", "hi": "has been" }
+                ],
+                "answer": 1,
+                "explanation": "Subject “The Kodagu district administration” is singular, so use “has” (present perfect). कर्ता एकवचन है, इसलिए “has” सही है।",
+                "feedback": [
+                    "A- Incorrect.",
+                    "B- Correct.",
+                    "C- Incorrect.",
+                    "D- Incorrect."
+                ]
+            },
+            {
+                "id": 7,
+                "subject": "Cloze Test",
+                "exam_info": "SSC STENOGRAPHER 10/12/2024 (Afternoon)",
+                "question": {
+                    "en": "The festival, which has been planned in association with Kodagu Zilla Panchayat and Horticulture Department, ________ (7) aimed at encouraging...",
+                    "hi": "यह उत्सव, जिसे कोडगु ज़िला पंचायत और बागवानी विभाग के सहयोग से आयोजित किया गया है, ________ (7) कोडगु में..."
+                },
+                "options": [
+                    { "en": "have", "hi": "have" },
+                    { "en": "was", "hi": "was" },
+                    { "en": "is", "hi": "is" },
+                    { "en": "had", "hi": "had" }
+                ],
+                "answer": 2,
+                "explanation": "“Festival” is singular, so “is aimed” is correct (present tense passive). “Festival” एकवचन है, इसलिए “is aimed” सही है।",
+                "feedback": [
+                    "A- Incorrect.",
+                    "B- Incorrect.",
+                    "C- Correct.",
+                    "D- Incorrect."
+                ]
+            },
+            {
+                "id": 8,
+                "subject": "Cloze Test",
+                "exam_info": "SSC STENOGRAPHER 10/12/2024 (Afternoon)",
+                "question": {
+                    "en": "...aimed at encouraging ________ (8) in Kodagu in view of the worldwide demand for Coorg honey.",
+                    "hi": "... ________ (8) को प्रोत्साहित करने के उद्देश्य से है, क्योंकि कोडगु शहद की विश्वव्यापी मांग है।"
+                },
+                "options": [
+                    { "en": "horticulture", "hi": "horticulture" },
+                    { "en": "apiculture", "hi": "apiculture" },
+                    { "en": "agriculture", "hi": "agriculture" },
+                    { "en": "sericulture", "hi": "sericulture" }
+                ],
+                "answer": 1,
+                "explanation": "Context is about honey/bees, so “apiculture” (मधुमक्खी पालन) fits. यह उत्सव मधुमक्खी पालन से संबंधित है, इसलिए “apiculture” सही है।",
+                "feedback": [
+                    "A- Incorrect.",
+                    "B- Correct.",
+                    "C- Incorrect.",
+                    "D- Incorrect."
+                ]
+            },
+            {
+                "id": 9,
+                "subject": "Cloze Test",
+                "exam_info": "SSC STENOGRAPHER 10/12/2024 (Afternoon)",
+                "question": {
+                    "en": "The Festival is ________ (9) to bring together not only people engaged in apiculture, but also scientists...",
+                    "hi": "यह उत्सव ________ (9) है ताकि न केवल मधुमक्खी पालन (एपिकल्चर) से जुड़े लोगों, बल्कि वैज्ञानिकों..."
+                },
+                "options": [
+                    { "en": "excepted", "hi": "excepted" },
+                    { "en": "accepted", "hi": "accepted" },
+                    { "en": "sophisticated", "hi": "sophisticated" },
+                    { "en": "expected", "hi": "expected" }
+                ],
+                "answer": 3,
+                "explanation": "“Expected to bring together” is the correct and natural phrase. “expected to bring together” एक सही और प्रचलित अभिव्यक्ति है।",
+                "feedback": [
+                    "A- Incorrect.",
+                    "B- Incorrect.",
+                    "C- Incorrect.",
+                    "D- Correct."
+                ]
+            },
+            {
+                "id": 10,
+                "subject": "Cloze Test",
+                "exam_info": "SSC STENOGRAPHER 10/12/2024 (Afternoon)",
+                "question": {
+                    "en": "...but also scientists, societies and companies ________ (10) in producing honey.",
+                    "hi": "...संस्थाओं और कंपनियों को भी एक साथ लाया जा सके, जो शहद के उत्पादन में ________ (10) हैं।"
+                },
+                "options": [
+                    { "en": "captivated", "hi": "captivated" },
+                    { "en": "engrossed", "hi": "engrossed" },
+                    { "en": "engaged", "hi": "engaged" },
+                    { "en": "related", "hi": "related" }
+                ],
+                "answer": 2,
+                "explanation": "“Engaged in producing honey” fits the context (actively involved). “engaged in” का अर्थ है किसी कार्य में सक्रिय रूप से लगे होना, जो यहाँ उपयुक्त है।",
+                "feedback": [
+                    "A- Incorrect.",
+                    "B- Incorrect.",
+                    "C- Correct.",
+                    "D- Incorrect."
+                ]
+            }
+        ];
+
+        let filteredQuestions = [];
+        let currentIndex = 0;
+        let userAnswers = {};
+        let currentMode = 'practice';
+        let timerInterval;
+        let timeLeft = 600;
+        let sessionStartTime;
+
+        function init() {
+            sessionStartTime = Date.now();
+            populateSubjects();
+            filterQuestions();
+        }
+
+        function populateSubjects() {
+            const subjects = [...new Set(QUESTION_DATABASE.map(q => q.subject))];
+            const select = document.getElementById('subject-filter');
+            select.innerHTML = '<option value="all">All Subjects</option>';
+            subjects.forEach(sub => {
+                const opt = document.createElement('option');
+                opt.value = sub;
+                opt.textContent = sub;
+                select.appendChild(opt);
+            });
+        }
+
+        function filterQuestions() {
+            const subject = document.getElementById('subject-filter').value;
+            filteredQuestions = subject === 'all' 
+                ? QUESTION_DATABASE 
+                : QUESTION_DATABASE.filter(q => q.subject === subject);
+            
+            currentIndex = 0;
+            userAnswers = {};
+            sessionStartTime = Date.now(); 
+            renderQuestion();
+            generatePalette();
+            resetUI();
+        }
+
+        function changeMode() {
+            currentMode = document.getElementById('mode-selector').value;
+            clearInterval(timerInterval);
+            userAnswers = {};
+            currentIndex = 0;
+            sessionStartTime = Date.now(); 
+            
+            if (currentMode === 'exam') {
+                document.getElementById('timer').classList.remove('hidden');
+                timeLeft = filteredQuestions.length * 60;
+                startTimer();
+            } else {
+                document.getElementById('timer').classList.add('hidden');
+            }
+            renderQuestion();
+            generatePalette();
+        }
+
+        function startTimer() {
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                const m = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+                const s = (timeLeft % 60).toString().padStart(2, '0');
+                document.getElementById('timer').textContent = `${m}:${s}`;
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    submitExam();
+                }
+            }, 1000);
+        }
+
+        function renderQuestion() {
+            if (!filteredQuestions.length) return;
+            const q = filteredQuestions[currentIndex];
+            
+            document.getElementById('q-num').textContent = currentIndex + 1;
+            document.getElementById('exam-info').textContent = `${q.subject} | ${q.exam_info}`;
+            document.getElementById('q-en').textContent = q.question.en;
+            document.getElementById('q-hi').textContent = q.question.hi;
+
+            const optsContainer = document.getElementById('options-container');
+            optsContainer.innerHTML = '';
+            
+            q.options.forEach((opt, index) => {
+                const btn = document.createElement('button');
+                btn.className = 'relative w-full text-left p-3 md:p-4 pr-12 md:pr-16 border-2 border-blue-200 rounded-lg hover:bg-blue-50 transition-colors flex flex-col gap-1 text-sm md:text-base';
+                btn.innerHTML = `<span class="font-bold text-blue-900">Option ${String.fromCharCode(65 + index)}:</span>
+                                 <span>${opt.en}</span>`;
+                
+                btn.onclick = () => handleOptionSelect(index, btn);
+                
+                if (userAnswers[currentIndex] !== undefined) {
+                    if (currentMode === 'practice') {
+                        btn.disabled = true;
+                        
+                        if (index === q.answer) {
+                            btn.classList.add('correct');
+                            btn.innerHTML += '<div class="absolute right-3 md:right-4 top-1/2 -translate-y-1/2 text-green-600 font-bold text-2xl md:text-3xl drop-shadow-md">✓</div>';
+                        }
+                        
+                        if (index === userAnswers[currentIndex] && index !== q.answer) {
+                            btn.classList.add('incorrect');
+                            btn.innerHTML += '<div class="absolute right-3 md:right-4 top-1/2 -translate-y-1/2 text-red-600 font-bold text-2xl md:text-3xl drop-shadow-md">✗</div>';
+                        }
+                    } else {
+                        if (index === userAnswers[currentIndex]) btn.classList.add('selected');
+                    }
+                }
+                
+                optsContainer.appendChild(btn);
+            });
+
+            if (currentMode === 'practice' && userAnswers[currentIndex] !== undefined) {
+                showFeedback(q);
+            } else {
+                document.getElementById('feedback-container').classList.add('hidden');
+            }
+
+            updatePaletteStyle();
+            document.getElementById('question-container').scrollTo({ top: 0, behavior: 'smooth' });
+            
+            if (window.MathJax) MathJax.typesetPromise();
+        }
+
+        function handleOptionSelect(optIndex, btnElement) {
+            if (currentMode === 'practice' && userAnswers[currentIndex] !== undefined) return;
+            
+            userAnswers[currentIndex] = optIndex;
+
+            if (currentMode === 'practice') {
+                renderQuestion(); 
+            } else {
+                Array.from(document.getElementById('options-container').children).forEach(b => b.classList.remove('selected'));
+                btnElement.classList.add('selected');
+                updatePaletteStyle();
+            }
+        }
+
+        function showFeedback(q) {
+            const fb = document.getElementById('feedback-container');
+            fb.classList.remove('hidden');
+            document.getElementById('explanation-text').textContent = q.explanation;
+            
+            const ul = document.getElementById('options-feedback');
+            ul.innerHTML = '';
+            q.feedback.forEach(f => {
+                const li = document.createElement('li');
+                li.textContent = f;
+                ul.appendChild(li);
+            });
+            
+            setTimeout(() => {
+                fb.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 100);
+        }
+
+        function generatePalette() {
+            const grid = document.getElementById('palette-grid');
+            grid.innerHTML = '';
+            filteredQuestions.forEach((_, i) => {
+                const btn = document.createElement('button');
+                btn.textContent = i + 1;
+                btn.className = 'w-8 h-8 md:w-10 md:h-10 rounded font-bold border border-blue-200 hover:bg-blue-100 flex items-center justify-center text-sm md:text-base transition-transform';
+                btn.onclick = () => {
+                    currentIndex = i;
+                    renderQuestion();
+                };
+                grid.appendChild(btn);
+            });
+            updatePaletteStyle();
+        }
+
+        function updatePaletteStyle() {
+            const buttons = document.getElementById('palette-grid').children;
+            for (let i = 0; i < buttons.length; i++) {
+                buttons[i].className = 'w-8 h-8 md:w-10 md:h-10 rounded font-bold border border-gray-300 bg-white hover:bg-blue-100 flex items-center justify-center text-sm md:text-base transition-all';
+                
+                if (userAnswers[i] !== undefined) {
+                    buttons[i].classList.add('palette-answered');
+                    buttons[i].classList.remove('bg-white', 'text-gray-700', 'border-gray-300');
+                }
+                
+                if (i === currentIndex) {
+                    buttons[i].classList.add('palette-current');
+                }
+            }
+        }
+
+        function nextQuestion() {
+            if (currentIndex < filteredQuestions.length - 1) {
+                currentIndex++;
+                renderQuestion();
+            }
+        }
+
+        function prevQuestion() {
+            if (currentIndex > 0) {
+                currentIndex--;
+                renderQuestion();
+            }
+        }
+
+        function submitExam() {
+            clearInterval(timerInterval);
+            let score = 0;
+            filteredQuestions.forEach((q, i) => {
+                if (userAnswers[i] === q.answer) score++;
+            });
+            
+            let timeElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
+            let m = Math.floor(timeElapsed / 60).toString().padStart(2, '0');
+            let s = (timeElapsed % 60).toString().padStart(2, '0');
+            
+            document.getElementById('summary-modal').classList.remove('hidden');
+            document.getElementById('final-score').textContent = score;
+            document.getElementById('total-q').textContent = filteredQuestions.length;
+            document.getElementById('accuracy').textContent = Math.round((score / filteredQuestions.length) * 100) || 0;
+            document.getElementById('time-taken').textContent = `${m}m ${s}s`;
+            
+            currentMode = 'practice'; 
+            document.getElementById('mode-selector').value = 'practice';
+        }
+
+        function closeSummary() {
+            document.getElementById('summary-modal').classList.add('hidden');
+            currentIndex = 0;
+            document.getElementById('timer').classList.add('hidden');
+            renderQuestion();
+            generatePalette();
+        }
+
+        function resetUI() {
+            document.getElementById('feedback-container').classList.add('hidden');
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
